@@ -29,42 +29,28 @@ Unlike traditional scanners that rely on fixed rule sets, this tool uses a langu
 
 ** Pipeline
 
-#+BEGIN_EXAMPLE
-Source Code
-    │
-    ▼
-┌─────────────────────┐
-│  1. Preprocessor    │  Language detection, chunking
-└────────┬────────────┘
-         │
-         ├──────────────────────────────────────┐
-         ▼                                      ▼
-┌─────────────────────┐              ┌──────────────────────┐
-│  2. Static Analysis │              │  3. Pattern Matcher  │
-│     (Bandit + AST)  │              │  (30+ regex rules)   │
-└────────┬────────────┘              └──────────┬───────────┘
-         │                                      │
-         └──────────────────┬───────────────────┘
-                            │
-                            ▼
-                  ┌──────────────────────┐
-                  │  4. RAG Retrieval    │
-                  │  ChromaDB + CVE/CWE  │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │  5. LLM Analysis     │
-                  │  Ollama (CodeLlama)  │
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │  6. Report           │
-                  │  JSON / Terminal     │
-                  │  / Streamlit UI      │
-                  └──────────────────────┘
-#+END_EXAMPLE
+#+begin_src mermaid :file .github/assets/pipeline.svg
+
+flowchart TD
+
+A[Source Code]
+
+A --> B["1. Preprocessor<br/>Language detection, chunking"]
+
+B --> C["2. Static Analysis<br/>(Bandit + AST)"]
+B --> D["3. Pattern Matcher<br/>(30+ regex rules)"]
+
+C --> E["4. RAG Retrieval<br/>ChromaDB + CVE/CWE"]
+D --> E
+
+E --> F["5. LLM Analysis<br/>Ollama (CodeLlama)"]
+
+F --> G["6. Report<br/>JSON / Terminal<br/>Streamlit UI"]
+
+#+end_src
+
+#+RESULTS:
+[[file:.github/assets/pipeline.svg]]
 
 * Requirements
 
