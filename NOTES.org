@@ -1,0 +1,17 @@
+#+TITLE: Personal Notes for this project
+#+DESCRIPTION: These are my personal notes for the project, not related to documentation at all
+
+* First Commands to Run
+
+#+BEGIN_SRC bash
+
+  python -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt && pip install -e .
+  cp .env.example .env
+  ollama serve             # keep running in background
+  ollama pull codellama:7b
+  python scripts/setup_db.py
+  vuln-scan tests/fixtures/vulnerable_code/sql_injection.py --no-llm   # instant test
+  streamlit run src/vuln_scanner/ui/app.py                              # web UI
+  
+#+END_SRC

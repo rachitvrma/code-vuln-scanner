@@ -1,0 +1,6 @@
+{
+  "expected_vulns": [],
+  "expected_cwes":  [],
+  "is_vulnerable":  false,
+  "notes": "Secure code — parameterised queries, whitelisted subprocess args, path validation, env-var credentials."
+}

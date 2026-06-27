@@ -1,0 +1,6 @@
+{
+  "expected_vulns": ["Buffer Overflow", "Integer Overflow"],
+  "expected_cwes":  ["CWE-120", "CWE-190"],
+  "is_vulnerable":  true,
+  "notes": "Contains gets(), strcpy(), sprintf(), scanf(%s), and an unsafe malloc multiply."
+}

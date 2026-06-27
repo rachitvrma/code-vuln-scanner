@@ -1,0 +1,191 @@
+#+TITLE: Architecture Documentation
+#+OPTIONS: toc:2 num:nil
+
+* System Overview
+
+The scanner is a three-layer system:
+
+1. *Static Layer* — fast, deterministic, no internet needed
+2. *RAG Layer* — semantic search over a local CVE/CWE knowledge base
+3. *LLM Layer* — reasoning and natural-language explanation via Ollama
+
+Each layer complements the others: the static layer finds obvious patterns,
+RAG grounds the LLM in real-world vulnerability data, and the LLM provides
+context-aware reasoning that fixed rules cannot.
+
+* Module Dependency Map
+
+#+BEGIN_EXAMPLE
+cli.py / ui/app.py
+       │
+       ▼
+  core/scanner.py             ← the orchestrator
+  ┌────┴──────────────────────────────────────────┐
+  │                                               │
+  ▼                                               ▼
+static_analysis/                            core/analyzer.py
+  ├── bandit_wrapper.py                          │
+  ├── ast_parser.py                              ▼
+  └── pattern_matcher.py                   llm/
+                                             ├── ollama_client.py
+                                             ├── prompt_templates.py
+                                             └── response_parser.py
+                                                  ▲
+  data/                     rag/                  │
+  ├── nvd_fetcher.py  ───►  ├── vectorstore.py ───┘
+  ├── cwe_parser.py   ───►  ├── embedder.py
+  └── preprocessor.py       └── retriever.py
+        │
+        ▼
+  config.py + models.py        ← used everywhere
+#+END_EXAMPLE
+
+* Data Flow
+
+** Setup phase (one-time, scripts/setup_db.py)
+
+#+BEGIN_EXAMPLE
+NVD API ──────────────► NVDFetcher ─────────────────┐
+                             │                       │
+                          CVEEntry objects           │
+                                                     ▼
+MITRE CWE XML ────────► CWEParser ──► CWEEntry ► CodeEmbedder ► ChromaDB
+                                                 (sentence-transformers)
+#+END_EXAMPLE
+
+** Scan phase (every scan call)
+
+#+BEGIN_EXAMPLE
+Source code (string)
+        │
+        ├──► CodePreprocessor ──► language detection
+        │                    ──► code chunking
+        │
+        ├──► BanditAnalyzer (Python only) ──► List[StaticFinding]
+        │
+        ├──► PatternMatcher ──────────────► List[PatternMatch]
+        │
+        └──► For each chunk:
+               │
+               ├──► CodeEmbedder.embed(chunk)
+               │         │
+               │         ▼
+               │    ChromaDB.query() ──► List[CVEEntry] + List[CWEEntry]
+               │
+               └──► CodeAnalyzer.analyze(
+                        code, language,
+                        cve_context, cwe_context,
+                        static_findings, pattern_matches
+                    )
+                         │
+                         ▼
+                    OllamaClient.generate(prompt)
+                         │
+                         ▼
+                    ResponseParser ──► List[Vulnerability]
+                         │
+                         ▼
+                    _deduplicate_vulns()
+                         │
+                         ▼
+                    ScanResult ──► reporter.print_summary()
+                                          OR
+                                  reporter.save_json()
+#+END_EXAMPLE
+
+* Key Design Decisions
+
+** Why Ollama instead of OpenAI API?
+
+Ollama lets us run models *100% locally*:
+- No API costs
+- No data leaves the machine (important for scanning proprietary code)
+- Works offline
+- Reproducible results (same model version = same output)
+
+** Why ChromaDB?
+
+ChromaDB is the simplest vector database to set up — no separate server process,
+just a directory on disk (=data/chromadb/=). For a NIELIT project it's ideal
+because the entire knowledge base is self-contained.
+
+Alternatives and when you'd use them:
+- *Pinecone* — cloud-hosted, scales to billions of vectors, needs API key
+- *Weaviate* — Docker-based, good for production multi-tenant systems
+- *Faiss* — faster at extreme scale, but no persistence built in
+
+** Why sentence-transformers and not OpenAI embeddings?
+
+Same reason as Ollama — local, free, offline. The =all-MiniLM-L6-v2= model
+produces 384-dimensional vectors and runs on CPU in ~10 ms per sentence.
+For better code understanding, =microsoft/codebert-base= can be used instead
+(set in =EMBEDDING_MODEL= in =.env=).
+
+** Why both pattern matching AND LLM?
+
+Pattern matching is:
+- Instantaneous (pure regex, no model needed)
+- 100% reproducible
+- Zero false negatives for known patterns (e.g., =gets()= in C is ALWAYS a risk)
+
+LLM analysis is:
+- Context-aware (understands that =password = os.environ["PASSWORD"]= is safe)
+- Can detect novel patterns the regex rules don't cover
+- Produces human-readable explanations
+
+The pattern matcher runs first and its hits are injected into the LLM prompt,
+which dramatically reduces false positives in the LLM's output.
+
+** Why chunk large files?
+
+LLMs have a context window limit (typically 4096–8192 tokens for 7B models).
+A 500-line file won't fit. The chunker splits code into overlapping segments
+(200-char overlap) so vulnerabilities that span a chunk boundary are still caught.
+
+* ChromaDB Schema
+
+** CVE Collection (=cve_database=)
+
+| Field          | Type          | Description                     |
+|----------------+---------------+---------------------------------|
+| id (doc ID)    | string        | CVE identifier (CVE-YYYY-NNNNN) |
+| document       | string        | Embedded text (id+severity+desc)|
+| severity       | metadata str  | CRITICAL/HIGH/MEDIUM/LOW        |
+| cvss_score     | metadata float| 0.0 – 10.0                      |
+| cwe_ids        | metadata json | JSON array of CWE IDs           |
+| references     | metadata json | JSON array of reference URLs    |
+| published      | metadata str  | Publication date                |
+| language_tags  | metadata json | Relevant programming languages  |
+
+** CWE Collection (=cwe_database=)
+
+| Field        | Type          | Description                       |
+|--------------+---------------+-----------------------------------|
+| id (doc ID)  | string        | CWE identifier (CWE-NNN)          |
+| document     | string        | Embedded text (id+name+desc)      |
+| name         | metadata str  | Short weakness name               |
+| mitigations  | metadata json | JSON array of mitigation strings  |
+| related      | metadata json | JSON array of related CWE IDs     |
+
+* Prompt Engineering
+
+The analysis prompt has five clearly delimited sections:
+
+1. *CVE context* — top-K most similar CVEs from ChromaDB (grounds the LLM)
+2. *CWE context* — top-K most similar CWEs (provides weakness taxonomy)
+3. *Static analysis hints* — Bandit findings (reduces false negatives)
+4. *Pattern matcher hits* — regex matches as leads for the LLM to verify
+5. *The actual code* — the source code snippet to analyse
+
+The final instruction asks for a strict JSON schema. Low temperature (0.05)
+is used to make the output as deterministic as possible.
+
+The =ResponseParser= handles: clean JSON, JSON in markdown fences, and
+truncated JSON (repaired by closing open braces).
+
+* Security Considerations
+
+- All analysis runs locally — no code is sent to external servers
+- The NVD API is the only external HTTP endpoint used (during setup only)
+- The scanner is read-only — it never modifies the code it analyses
+- ChromaDB data is stored in =data/chromadb/= — back this up after setup

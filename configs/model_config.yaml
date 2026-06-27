@@ -1,0 +1,55 @@
+# model_config.yaml
+# LLM model profiles and prompt tuning parameters.
+
+default_model: codellama:7b
+
+models:
+  codellama:7b:
+    description: "Meta's CodeLlama 7B — fast, code-focused. Best for most machines."
+    min_ram_gb: 8
+    context_length: 4096
+    temperature: 0.05      # near-deterministic for security analysis
+    num_ctx: 4096
+    recommended: true
+
+  deepseek-coder:6.7b:
+    description: "DeepSeek Coder 6.7B — excellent on code reasoning benchmarks."
+    min_ram_gb: 8
+    context_length: 4096
+    temperature: 0.05
+    num_ctx: 4096
+    recommended: true
+
+  codellama:13b:
+    description: "CodeLlama 13B — more accurate but needs 16 GB RAM."
+    min_ram_gb: 16
+    context_length: 4096
+    temperature: 0.05
+    num_ctx: 4096
+    recommended: false
+
+  llama3.1:8b:
+    description: "Llama 3.1 8B — strong general reasoning, good fallback."
+    min_ram_gb: 8
+    context_length: 8192
+    temperature: 0.1
+    num_ctx: 8192
+    recommended: false
+
+  llama3:8b:
+    description: "Llama 3 8B — reliable general-purpose model."
+    min_ram_gb: 8
+    context_length: 8192
+    temperature: 0.1
+    num_ctx: 8192
+    recommended: false
+
+# System prompt header injected before every analysis prompt
+system_prompt: |
+  You are an expert cybersecurity engineer specialising in static code analysis
+  and vulnerability research. You have deep knowledge of the OWASP Top 10,
+  CWE/SANS Top 25, and the CVE database. Your task is to perform precise,
+  evidence-based security analysis of source code. You always cite the exact
+  line number where a vulnerability appears and recommend a concrete fix.
+  You never report false positives unless you have strong evidence.
+  You respond ONLY with the structured JSON format requested.

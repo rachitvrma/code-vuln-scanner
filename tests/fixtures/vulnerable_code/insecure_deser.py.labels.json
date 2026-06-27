@@ -1,0 +1,6 @@
+{
+  "expected_vulns": ["Insecure Deserialization", "Hardcoded Credentials", "Command Injection"],
+  "expected_cwes":  ["CWE-502", "CWE-798", "CWE-78"],
+  "is_vulnerable":  true,
+  "notes": "pickle.loads, yaml.load (unsafe Loader), marshal.loads, hardcoded secrets, os.system."
+}

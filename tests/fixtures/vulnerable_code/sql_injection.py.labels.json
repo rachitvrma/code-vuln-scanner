@@ -1,0 +1,6 @@
+{
+  "expected_vulns": ["SQL Injection"],
+  "expected_cwes":  ["CWE-89"],
+  "is_vulnerable":  true,
+  "notes": "Three SQL injection patterns: f-string, concatenation, and % formatting."
+}

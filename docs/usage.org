@@ -1,0 +1,199 @@
+#+TITLE: Usage Guide
+#+OPTIONS: toc:2 num:nil
+
+* Quick Start
+
+Make sure Ollama is running (=ollama serve=) and the knowledge base is built
+(=python scripts/setup_db.py=). Then:
+
+#+BEGIN_SRC bash
+# Web UI
+streamlit run src/vuln_scanner/ui/app.py
+
+# CLI
+vuln-scan path/to/yourfile.py
+#+END_SRC
+
+* CLI Reference
+
+** Basic usage
+
+#+BEGIN_SRC bash
+vuln-scan <file> [options]
+#+END_SRC
+
+** Options
+
+| Flag                | Default      | Description                                   |
+|---------------------+--------------+-----------------------------------------------|
+| =--language=, =-l=  | auto         | Language: python c cpp java javascript php    |
+| =--format=, =-f=    | text         | Output format: text or json                   |
+| =--output=, =-o=    | (stdout)     | Write JSON report to this file                |
+| =--model=, =-m=     | (from .env)  | Override Ollama model for this scan           |
+| =--no-llm=          | false        | Skip LLM; run static + pattern matching only  |
+| =--confidence=      | (from .env)  | Minimum confidence [0.0–1.0]                  |
+| =--quiet=, =-q=     | false        | Suppress info-level log messages              |
+
+** Exit codes
+
+| Code | Meaning                        |
+|------+--------------------------------|
+|    0 | No vulnerabilities found       |
+|    1 | Low severity findings          |
+|    2 | Medium severity findings       |
+|    3 | High severity findings         |
+|    4 | Critical severity findings     |
+
+This enables CI/CD integration:
+
+#+BEGIN_SRC yaml
+# Example GitHub Actions step:
+- name: Security scan
+  run: vuln-scan src/app.py --no-llm
+  # The pipeline fails if HIGH or CRITICAL vulns are found
+  # (exit code 3 or 4 → non-zero → CI failure)
+#+END_SRC
+
+** Examples
+
+#+BEGIN_SRC bash
+# Auto-detect language, full LLM analysis
+vuln-scan app.py
+
+# Explicitly specify C language
+vuln-scan main.c --language c
+
+# Fast scan (no Ollama) — great for CI
+vuln-scan app.py --no-llm
+
+# Use a more capable model for this one scan
+vuln-scan critical_module.py --model codellama:13b
+
+# Save a JSON report
+vuln-scan app.py --format json --output reports/app_scan.json
+
+# Low-confidence threshold (catch more, accept more false positives)
+vuln-scan app.py --confidence 0.3
+
+# High-confidence threshold (fewer but more reliable findings)
+vuln-scan app.py --confidence 0.85
+#+END_SRC
+
+* Web UI Guide
+
+** Sidebar
+
+- *Model* — shows which Ollama model is active (set in =.env=)
+- *Knowledge Base* — shows how many CVEs and CWEs are indexed
+- *Ollama status* — green = running, red = not started
+
+If the knowledge base shows 0 entries, run =python scripts/setup_db.py=.
+If Ollama shows red, run =ollama serve= in a separate terminal.
+
+** Scanning code
+
+Two input methods are available:
+
+*** Paste Code tab
+
+1. Select the language from the dropdown (or leave on "auto")
+2. Paste your source code into the text area
+3. Click *Scan for Vulnerabilities*
+
+*** Upload File tab
+
+1. Click the uploader and select a file
+2. The language is auto-detected from the file extension
+3. Click *Scan for Vulnerabilities*
+
+** Reading results
+
+*Summary metrics* at the top show:
+- Overall Risk (the worst severity found)
+- Total vulnerability count
+- Count broken down by severity
+
+*Vulnerability cards* each show:
+- Severity badge (CRITICAL / HIGH / MEDIUM / LOW)
+- Vulnerability type and CWE identifier
+- Confidence percentage
+- Description of why the code is vulnerable
+- The exact vulnerable lines
+- Referenced CVE IDs (if any matched from the knowledge base)
+- Recommended fix
+
+*Bandit Static Analysis* expander — findings from the Bandit linter (Python only)
+
+*Pattern Matcher* expander — regex hits before LLM analysis
+
+*Export JSON report* button — downloads the full structured result
+
+* Interpreting Results
+
+** Confidence score
+
+The confidence score (0–100%) reflects how certain the detection is:
+
+| Range    | Interpretation                                      |
+|----------+-----------------------------------------------------|
+| 90–100%  | Very high — almost certainly a real vulnerability   |
+| 70–89%   | High — likely real, review the code carefully       |
+| 50–69%   | Moderate — possible vulnerability, needs review     |
+| 30–49%   | Low — pattern match, may be a false positive        |
+| <30%     | Very low — filtered out by default (adjust with =--confidence=) |
+
+** Source field
+
+Each finding has a =source= field:
+
+- =llm= — detected by the LLM reasoning over the code (highest quality)
+- =pattern= — detected by regex rule (fast, no LLM needed)
+- =static= — detected by Bandit (Python-specific)
+
+** What to do with findings
+
+1. *Read the description* to understand why the code is flagged
+2. *Check the line numbers* in your editor
+3. *Apply the remediation* suggestion
+4. *Re-scan* to verify the fix removed the finding
+
+* Tips for Better Results
+
+** Use the right chunk size
+
+For very large files, reduce =MAX_CODE_CHUNK_SIZE= in =.env= to 1000 characters.
+This gives the LLM smaller, more focused prompts.
+
+** Model selection trade-offs
+
+| Model             | Speed  | Quality | RAM needed |
+|-------------------+--------+---------+------------|
+| codellama:7b      | Fast   | Good    | 8 GB       |
+| deepseek-coder:6.7b | Fast | Very good | 8 GB     |
+| codellama:13b     | Slow   | Best    | 16 GB      |
+
+** Scanning a whole directory
+
+#+BEGIN_SRC bash
+# Scan all Python files in a project
+find . -name "*.py" | while read f; do
+    echo "=== $f ==="
+    vuln-scan "$f" --no-llm --quiet
+done
+#+END_SRC
+
+** Updating the knowledge base
+
+CVE data is cached locally. To refresh after NVD publishes new entries:
+
+#+BEGIN_SRC bash
+python scripts/fetch_cve_data.py --fresh
+#+END_SRC
+
+* Limitations
+
+- *Language support* — Python, C/C++, Java, JavaScript, PHP. Other languages get LLM analysis only (no Bandit, limited patterns).
+- *Context window* — files over ~8000 characters are chunked; vulnerabilities spanning chunk boundaries may be detected twice or missed at the exact boundary.
+- *False positives* — the LLM occasionally flags safe code. Raise =CONFIDENCE_THRESHOLD= in =.env= to reduce them.
+- *False negatives* — novel or obfuscated vulnerabilities may be missed. Use this tool to *assist* code review, not replace it.
+- *No inter-procedural analysis* — the scanner analyses code snippets. It cannot track data flow across multiple files.
