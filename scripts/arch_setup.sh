@@ -104,7 +104,7 @@ info "Virtual environment created with: $(.venv/bin/python --version)"
 
 # ── 6. Install dependencies ───────────────────────────────────────────────────
 info "Installing Python dependencies (pre-built wheels preferred)..."
-.venv/bin/pip install --upgrade pip setuptools wheel --quiet
+.venv/bin/pip install --upgrade pip --quiet
 
 # --prefer-binary: grab pre-built wheels instead of compiling from source.
 # This is what avoids the PyO3 / GCC-15 compilation errors entirely.
