@@ -1,6 +1,7 @@
 #+TITLE: Setup & Installation Guide
 #+OPTIONS: toc:2 num:nil
 
+<<<<<<< HEAD
 * Prerequisites Checklist
 
 Before starting, verify you have the following:
@@ -245,3 +246,323 @@ Subsequent runs are fast because the model is cached.
 #+BEGIN_SRC bash
   pip install pydantic-settings==2.7.0
 #+END_SRC
+||||||| (empty tree)
+=======
+* Python Version Management
+
+This project requires *Python 3.12*.  It will not build on Python 3.14
+(Arch Linux default) due to two upstream issues:
+
+| Package        | Root cause on Python 3.14                                          |
+|----------------+--------------------------------------------------------------------|
+| pydantic-core  | Ships PyO3 0.22.x, which only supports CPython ≤ 3.13             |
+| tokenizers     | Bundles oniguruma C library; GCC 15 C23 strict pointer rules break it |
+
+Both packages have pre-built wheels for Python 3.12 — zero compilation needed.
+
+** Arch Linux — fix with pyenv
+
+Arch is a rolling release so it ships whatever Python is latest upstream.
+=pyenv= lets you install and pin any Python version per-project without
+touching your system Python.
+
+*** Automated setup (recommended)
+
+#+BEGIN_SRC bash
+chmod +x scripts/arch_setup.sh
+./scripts/arch_setup.sh
+#+END_SRC
+
+The script installs pyenv, installs Python 3.12, pins it for this project,
+creates the venv, and installs all dependencies with =--prefer-binary=.
+
+*** Manual steps
+
+*Step 1 — Install pyenv*
+
+#+BEGIN_SRC bash
+# Option A: pacman (if available)
+sudo pacman -S pyenv
+
+# Option B: pyenv installer
+curl https://pyenv.run | bash
+#+END_SRC
+
+Add these three lines to your =~/.bashrc= (or =~/.zshrc=):
+
+#+BEGIN_SRC bash
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+#+END_SRC
+
+Reload: =source ~/.bashrc=
+
+*Step 2 — Install build deps and Python 3.12*
+
+#+BEGIN_SRC bash
+sudo pacman -Sy --needed base-devel openssl zlib xz tk sqlite readline bzip2 libffi
+pyenv install 3.12.10
+#+END_SRC
+
+*Step 3 — Pin 3.12 for this project*
+
+#+BEGIN_SRC bash
+cd code-vuln-scanner
+pyenv local 3.12.10    # writes .python-version — already committed to the repo
+python --version        # should print Python 3.12.x
+#+END_SRC
+
+*Step 4 — Create venv and install*
+
+#+BEGIN_SRC bash
+python -m venv .venv
+source .venv/bin/activate
+
+# --prefer-binary makes pip download pre-built wheels rather than compiling.
+# This is the flag that avoids the PyO3 and GCC-15 issues entirely.
+pip install --prefer-binary -r requirements.txt
+pip install -e .
+#+END_SRC
+
+*** Why =--prefer-binary= matters
+
+| Package        | Pre-built wheel | Source compile time |
+|----------------+-----------------+---------------------|
+| pydantic-core  | ~700 KB         | ~5 min Rust build   |
+| tokenizers     | ~3 MB           | ~10 min Rust + C    |
+
+With =--prefer-binary= and Python 3.12, pip downloads ready-made binaries
+and the problem from the error log never occurs.
+
+** NixOS — the permanent solution
+
+On NixOS, Python version management is handled by Nix.
+The =flake.nix= at the project root pins =python312= from nixpkgs.
+This entire class of problems disappears because:
+
+- The Python version is *declared*, not inferred from system PATH
+- =PIP_PREFER_BINARY=1= is set automatically in the shell environment
+- System libraries (openssl, zlib, libffi) are all provided by Nix
+- GCC version is also controlled by nixpkgs, not the host
+
+*** Using flakes (recommended)
+
+Enable flakes if you haven't already. Add to =/etc/nix/nix.conf=:
+#+BEGIN_EXAMPLE
+experimental-features = nix-command flakes
+#+END_EXAMPLE
+
+Then:
+
+#+BEGIN_SRC bash
+cd code-vuln-scanner
+nix develop     # drops into a shell with Python 3.12, Ollama, all build tools
+                # installs pip dependencies automatically on first run
+#+END_SRC
+
+After =nix develop=, the venv is active and you run everything normally:
+
+#+BEGIN_SRC bash
+# Terminal 1 — keep running
+ollama serve
+
+# Terminal 2
+ollama pull codellama:7b
+python scripts/setup_db.py                          # first time only
+streamlit run src/vuln_scanner/ui/app.py
+#+END_SRC
+
+*** Using nix-shell (non-flake)
+
+#+BEGIN_SRC bash
+nix-shell    # uses shell.nix in the project root
+#+END_SRC
+
+*** Re-entering the shell
+
+Every time you open a new terminal, run =nix develop= again.
+The =.venv/.nix_installed= sentinel file means pip doesn't re-run — it just
+activates the already-built venv instantly.
+
+*** Direnv integration (quality-of-life)
+
+With =direnv= + =nix-direnv= the dev shell activates automatically when you
+=cd= into the project:
+
+#+BEGIN_SRC bash
+nix profile install nixpkgs#direnv nixpkgs#nix-direnv
+# Add to ~/.bashrc:  eval "$(direnv hook bash)"
+
+echo "use flake" > .envrc
+direnv allow
+#+END_SRC
+
+Now =cd code-vuln-scanner= activates Python 3.12 with no manual step.
+
+* Step-by-Step Setup
+
+Once your Python version is sorted (see above), follow these steps.
+
+** Step 1: Clone the repository
+
+#+BEGIN_SRC bash
+git clone https://github.com/<your-username>/code-vuln-scanner.git
+cd code-vuln-scanner
+#+END_SRC
+
+** Step 2: Create a Python virtual environment
+
+/Skip this if you used the Arch setup script or are using NixOS — the venv is already created./
+
+#+BEGIN_SRC bash
+python -m venv .venv
+source .venv/bin/activate
+#+END_SRC
+
+** Step 3: Install Python dependencies
+
+#+BEGIN_SRC bash
+pip install --prefer-binary -r requirements.txt
+pip install -e .
+#+END_SRC
+
+** Step 4: Configure environment variables
+
+#+BEGIN_SRC bash
+cp .env.example .env
+# Open in Emacs:
+emacs .env
+#+END_SRC
+
+Minimum required settings:
+
+#+BEGIN_EXAMPLE
+OLLAMA_MODEL=codellama:7b
+SKIP_LLM=false
+#+END_EXAMPLE
+
+Optional but recommended — speeds up setup_db.py by 8×:
+
+#+BEGIN_EXAMPLE
+NVD_API_KEY=<your_key>     # free at nvd.nist.gov/developers/request-an-api-key
+#+END_EXAMPLE
+
+** Step 5: Start Ollama and pull a model
+
+Keep a terminal running with the server:
+
+#+BEGIN_SRC bash
+ollama serve
+#+END_SRC
+
+In a separate terminal, pull a model (once):
+
+#+BEGIN_SRC bash
+ollama pull codellama:7b          # ~3.8 GB, good for 8 GB RAM
+# alternatives:
+# ollama pull deepseek-coder:6.7b
+# ollama pull codellama:13b       # needs 16 GB RAM
+#+END_SRC
+
+Verify:
+
+#+BEGIN_SRC bash
+ollama list
+#+END_SRC
+
+** Step 6: Build the knowledge base
+
+#+BEGIN_SRC bash
+python scripts/setup_db.py
+#+END_SRC
+
+Downloads MITRE CWE XML (~12 MB) and fetches CVEs from NVD.
+Run once; cached data survives across sessions.
+
+Time: ~10–15 min without NVD API key, ~1–2 min with one.
+
+** Step 7: Verify everything works
+
+#+BEGIN_SRC bash
+# Fast test — no LLM, just pattern matching
+vuln-scan tests/fixtures/vulnerable_code/sql_injection.py --no-llm
+
+# Full scan (Ollama must be running)
+vuln-scan tests/fixtures/vulnerable_code/insecure_deser.py
+
+# Unit tests (no Ollama needed)
+pytest tests/unit/ -v
+#+END_SRC
+
+** Step 8: Launch the web UI
+
+#+BEGIN_SRC bash
+streamlit run src/vuln_scanner/ui/app.py
+#+END_SRC
+
+Open http://localhost:8501
+
+* Development Setup
+
+#+BEGIN_SRC bash
+pip install -r requirements-dev.txt
+
+black src/ tests/
+isort src/ tests/
+flake8 src/ tests/ --max-line-length=100
+pytest tests/unit/ --cov=vuln_scanner --cov-report=html
+#+END_SRC
+
+* Emacs Integration
+
+#+BEGIN_SRC emacs-lisp
+;; .dir-locals.el at project root — sets python interpreter to the venv
+((python-mode
+  (python-shell-interpreter . ".venv/bin/python")))
+#+END_SRC
+
+Run tests with =M-x compile= → =pytest tests/unit/ -v=
+
+* Troubleshooting
+
+** "Building wheel for pydantic-core ... error" / "Building wheel for tokenizers ... error"
+
+You are on Python 3.14 (Arch default). Follow the pyenv steps above.
+Quick fix:
+
+#+BEGIN_SRC bash
+./scripts/arch_setup.sh
+#+END_SRC
+
+** "ollama: command not found"
+Not installed or not in PATH. See https://ollama.com/download
+
+** "Cannot connect to Ollama"
+Server not running. Run =ollama serve= in a terminal and keep it open.
+
+** "Model 'codellama:7b' not found"
+Not pulled yet. Run: =ollama pull codellama:7b=
+
+** "CVE collection is empty"
+Knowledge base not populated. Run: =python scripts/setup_db.py=
+
+** Scan is very slow (>5 min)
+
+Normal for 13B models on CPU-only machines. Switch to 7B:
+
+#+BEGIN_SRC bash
+OLLAMA_MODEL=codellama:7b vuln-scan yourfile.py
+#+END_SRC
+
+** "error: failed to run custom build command for pyo3-ffi" on NixOS
+
+This means a package tried to compile from source. Make sure you entered the
+dev shell first:
+
+#+BEGIN_SRC bash
+nix develop      # must be done before pip install
+#+END_SRC
+
+The =PIP_PREFER_BINARY=1= variable set in =flake.nix= prevents compilation.
+>>>>>>> b779867 (modify: major changes)

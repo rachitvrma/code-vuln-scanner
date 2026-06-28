@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ── Core AI / LLM ─────────────────────────────────────────────────────────────
 # Vector database for RAG knowledge store
 chromadb==0.5.23
@@ -29,6 +30,48 @@ PyYAML==6.0.2
 
 # ── Code Processing ───────────────────────────────────────────────────────────
 # Syntax highlighting / code tokenization
+||||||| (empty tree)
+=======
+# ── Python version requirement ─────────────────────────────────────────────────
+# Requires Python 3.12.  Python 3.14 (Arch default) breaks:
+#   • pydantic-core 2.x  — PyO3 0.22.x only supports up to CPython 3.13
+#   • tokenizers (via sentence-transformers) — GCC 15 + C23 strict pointer rules
+#     break the bundled oniguruma C library at compile time
+#
+# Fix on Arch:   see docs/setup.org → "Python version management"
+# Fix on NixOS:  nix develop  (flake.nix pins python312 automatically)
+
+# ── Core AI / LLM ─────────────────────────────────────────────────────────────
+# Vector database for RAG knowledge store
+chromadb==0.5.23
+
+# Sentence embeddings (code and text)
+# tokenizers (transitive dep) has pre-built 3.12 wheels — no C compilation needed
+sentence-transformers==3.3.1
+
+# ── Data & Networking ─────────────────────────────────────────────────────────
+pandas==2.2.3
+numpy==1.26.4
+requests==2.32.3
+tqdm==4.67.1
+PyYAML==6.0.2
+
+# ── Static Analysis ───────────────────────────────────────────────────────────
+bandit==1.8.3
+
+# ── Web UI ────────────────────────────────────────────────────────────────────
+streamlit==1.41.1
+
+# ── Configuration & Utilities ─────────────────────────────────────────────────
+python-dotenv==1.0.1
+# pydantic-core has pre-built 3.12 wheels — no Rust compilation needed
+pydantic==2.10.3
+pydantic-settings==2.7.0
+loguru==0.7.3
+rich==13.9.4
+
+# ── Code Processing ───────────────────────────────────────────────────────────
+>>>>>>> b779867 (modify: major changes)
 pygments==2.18.0
 
 # ── Report Output ─────────────────────────────────────────────────────────────

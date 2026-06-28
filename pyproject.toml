@@ -1,5 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
+<<<<<<< HEAD
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
@@ -8,6 +9,19 @@ version = "0.1.0"
 description = "LLM-based Code Vulnerability Scanner using RAG over CVE/CWE databases"
 readme = "README.org"
 requires-python = ">=3.10"
+||||||| (empty tree)
+=======
+# build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-vuln-scanner"
+version = "0.1.0"
+description = "LLM-based Code Vulnerability Scanner using RAG over CVE/CWE databases"
+# readme = "README.org"
+readme = {file = "README.org", content-type = "text/plain"}
+requires-python = ">=3.10,<3.14"   # 3.14 breaks pydantic-core (PyO3) + tokenizers (GCC 15/C23)
+>>>>>>> b779867 (modify: major changes)
 license = { text = "MIT" }
 authors = [{ name = "NIELIT Project", email = "your@email.com" }]
 keywords = ["security", "vulnerability", "llm", "rag", "static-analysis", "cybersecurity"]

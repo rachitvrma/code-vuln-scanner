@@ -33,10 +33,18 @@ st.set_page_config(
 )
 
 # ── Imports (after page config) ───────────────────────────────────────────────
+<<<<<<< HEAD
 from ..config import settings
 from ..core.reporter import ReportGenerator
 from ..core.scanner import VulnerabilityScanner
 from ..models import Severity
+||||||| (empty tree)
+=======
+from vuln_scanner.config import settings
+from vuln_scanner.core.reporter import ReportGenerator
+from vuln_scanner.core.scanner import VulnerabilityScanner
+from vuln_scanner.models import Severity
+>>>>>>> b779867 (modify: major changes)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

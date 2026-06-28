@@ -29,6 +29,7 @@ Unlike traditional scanners that rely on fixed rule sets, this tool uses a langu
 
 ** Pipeline
 
+<<<<<<< HEAD
 #+begin_src mermaid :file .github/assets/pipeline.svg
 
 flowchart TD
@@ -258,6 +259,253 @@ Study these to understand the project deeply:
 
   # Full integration tests (requires Ollama + populated DB)
   pytest tests/integration/ -m integration -v
+||||||| (empty tree)
+=======
+#+BEGIN_EXAMPLE
+Source Code
+    │
+    ▼
+┌─────────────────────┐
+│  1. Preprocessor    │  Language detection, chunking
+└────────┬────────────┘
+         │
+         ├──────────────────────────────────────┐
+         ▼                                      ▼
+┌─────────────────────┐              ┌──────────────────────┐
+│  2. Static Analysis │              │  3. Pattern Matcher  │
+│     (Bandit + AST)  │              │  (30+ regex rules)   │
+└────────┬────────────┘              └──────────┬───────────┘
+         │                                      │
+         └──────────────────┬───────────────────┘
+                            │
+                            ▼
+                  ┌──────────────────────┐
+                  │  4. RAG Retrieval    │
+                  │  ChromaDB + CVE/CWE  │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │  5. LLM Analysis     │
+                  │  Ollama (CodeLlama)  │
+                  └──────────┬───────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │  6. Report           │
+                  │  JSON / Terminal     │
+                  │  / Streamlit UI      │
+                  └──────────────────────┘
+#+END_EXAMPLE
+
+* Requirements
+
+** Hardware
+- RAM: 8 GB minimum (for 7B parameter models); 16 GB recommended
+- Disk: ~5 GB for models, ~200 MB for the CWE database
+
+** Software
+- Python 3.12 (required — see docs/setup.org for Arch/NixOS instructions)
+- *Not* Python 3.14: pydantic-core (PyO3 compat) and tokenizers (GCC 15 C23) fail to build
+- [[https://ollama.com][Ollama]] (local LLM server)
+- Git
+
+* Installation
+
+** 1. Clone the repository
+
+#+BEGIN_SRC bash
+git clone https://github.com/<your-username>/code-vuln-scanner.git
+cd code-vuln-scanner
+#+END_SRC
+
+** 2. Create a virtual environment
+
+#+BEGIN_SRC bash
+python -m venv .venv
+source .venv/bin/activate        # Linux / macOS
+# .venv\Scripts\activate         # Windows PowerShell
+#+END_SRC
+
+** 3. Install Python dependencies
+
+#+BEGIN_SRC bash
+pip install -r requirements.txt
+pip install -e .                  # installs the vuln-scan CLI command
+#+END_SRC
+
+** 4. Install Ollama and pull a model
+
+Visit https://ollama.com and install Ollama for your OS, then:
+
+#+BEGIN_SRC bash
+ollama serve                      # start the server (keep this running)
+
+# In a separate terminal, pull a model (choose one):
+ollama pull codellama:7b          # recommended — fast, code-focused (~4 GB)
+ollama pull deepseek-coder:6.7b   # alternative — strong code reasoning (~4 GB)
+ollama pull codellama:13b         # best accuracy, needs ~16 GB RAM
+#+END_SRC
+
+** 5. Configure environment
+
+#+BEGIN_SRC bash
+cp .env.example .env
+# Edit .env with your settings (model name, optional NVD API key, etc.)
+#+END_SRC
+
+** 6. Populate the vulnerability knowledge base
+
+#+BEGIN_SRC bash
+python scripts/setup_db.py
+#+END_SRC
+
+This downloads the MITRE CWE database and fetches CVE records from NVD.
+Runtime: ~10 min without an NVD API key, ~1–2 min with one.
+
+To get a free NVD API key: https://nvd.nist.gov/developers/request-an-api-key
+
+* Usage
+
+** Web Interface (Streamlit)
+
+#+BEGIN_SRC bash
+streamlit run src/vuln_scanner/ui/app.py
+#+END_SRC
+
+Open http://localhost:8501 in your browser.
+
+** Command Line
+
+#+BEGIN_SRC bash
+# Basic scan (auto-detects language)
+vuln-scan path/to/file.py
+
+# Specify language explicitly
+vuln-scan path/to/main.c --language c
+
+# Output as JSON
+vuln-scan app.py --format json --output report.json
+
+# Fast scan — pattern + static only (no Ollama needed)
+vuln-scan app.py --no-llm
+
+# Use a different model
+vuln-scan app.py --model deepseek-coder:6.7b
+#+END_SRC
+
+Exit codes: =0= no issues · =1= low · =2= medium · =3= high · =4= critical
+
+** Evaluation
+
+#+BEGIN_SRC bash
+python scripts/evaluate.py                 # run on all labelled fixtures
+python scripts/evaluate.py --no-llm       # pattern-only (fast)
+python scripts/evaluate.py --output eval_results.json
+#+END_SRC
+
+** Refresh CVE data
+
+#+BEGIN_SRC bash
+python scripts/fetch_cve_data.py           # refresh all NVD keywords
+python scripts/fetch_cve_data.py --fresh   # ignore cache, re-download
+#+END_SRC
+
+* Project Structure
+
+#+BEGIN_EXAMPLE
+code-vuln-scanner/
+├── src/vuln_scanner/        # Main Python package
+│   ├── config.py            # All settings (pydantic-settings)
+│   ├── models.py            # Pydantic data models
+│   ├── cli.py               # vuln-scan CLI entry point
+│   ├── core/
+│   │   ├── scanner.py       # Pipeline orchestrator
+│   │   ├── analyzer.py      # LLM analysis stage
+│   │   └── reporter.py      # JSON + rich terminal output
+│   ├── llm/
+│   │   ├── ollama_client.py # Ollama REST API wrapper
+│   │   ├── prompt_templates.py # All prompt strings
+│   │   └── response_parser.py  # JSON parsing with fallbacks
+│   ├── rag/
+│   │   ├── embedder.py      # sentence-transformers wrapper
+│   │   ├── vectorstore.py   # ChromaDB interface
+│   │   └── retriever.py     # CVE/CWE retrieval
+│   ├── static_analysis/
+│   │   ├── pattern_matcher.py # 30+ regex vulnerability patterns
+│   │   ├── bandit_wrapper.py  # Bandit CLI wrapper (Python)
+│   │   └── ast_parser.py      # Python AST analysis
+│   ├── data/
+│   │   ├── nvd_fetcher.py   # NVD API v2.0 client
+│   │   ├── cwe_parser.py    # MITRE CWE XML parser
+│   │   └── preprocessor.py  # Language detection & chunking
+│   └── ui/
+│       └── app.py           # Streamlit web UI
+├── scripts/
+│   ├── setup_db.py          # One-time knowledge base setup
+│   ├── fetch_cve_data.py    # Selective CVE refresh
+│   └── evaluate.py          # Precision / recall evaluation
+├── tests/
+│   ├── unit/                # Fast offline tests
+│   ├── integration/         # Requires Ollama + ChromaDB
+│   └── fixtures/            # Labelled vulnerable/safe code samples
+├── configs/
+│   ├── scanner_config.yaml  # Vulnerability categories & NVD seeds
+│   └── model_config.yaml    # LLM profiles & system prompt
+├── data/                    # Runtime data (git-ignored)
+│   ├── chromadb/            # Persisted vector store
+│   ├── cve_cache/           # NVD response cache
+│   └── raw/                 # Downloaded CWE XML
+├── docs/                    # Org-format documentation
+├── reports/                 # Generated scan reports
+└── pyproject.toml           # Build system + tool config
+#+END_EXAMPLE
+
+* Libraries Used
+
+Study these to understand the project deeply:
+
+| Library              | Purpose                                    | Study resource                                    |
+|----------------------+--------------------------------------------+---------------------------------------------------|
+| pydantic             | Data validation, settings, typed models    | https://docs.pydantic.dev                         |
+| pydantic-settings    | .env-based configuration                   | https://docs.pydantic.dev/latest/concepts/pydantic_settings/ |
+| sentence-transformers| Dense text embeddings (RAG)                | https://sbert.net                                 |
+| chromadb             | Vector database (similarity search)        | https://docs.trychroma.com                        |
+| requests             | HTTP client (NVD API, Ollama)              | https://docs.python-requests.org                  |
+| streamlit            | Python web UI framework                    | https://docs.streamlit.io                         |
+| bandit               | Python security linter                     | https://bandit.readthedocs.io                     |
+| loguru               | Structured logging                         | https://loguru.readthedocs.io                     |
+| rich                 | Terminal formatting / tables / panels      | https://rich.readthedocs.io                       |
+| PyYAML               | YAML config file parsing                   | https://pyyaml.org/wiki/PyYAMLDocumentation       |
+| tqdm                 | Progress bars                              | https://tqdm.github.io                            |
+| pygments             | Syntax highlighting                        | https://pygments.org/docs/                        |
+| ast (stdlib)         | Python abstract syntax tree parsing        | https://docs.python.org/3/library/ast.html        |
+| xml.etree (stdlib)   | XML parsing (CWE database)                 | https://docs.python.org/3/library/xml.etree.elementtree.html |
+| pytest               | Testing framework                          | https://docs.pytest.org                           |
+| black / isort        | Code formatting                            | https://black.readthedocs.io                      |
+
+** Concepts to study
+
+- *RAG (Retrieval-Augmented Generation)* — the core technique used to ground LLM outputs in real CVE/CWE data
+- *Vector embeddings* — how text is converted to numbers for similarity search
+- *Cosine similarity* — how ChromaDB compares embeddings
+- *Prompt engineering* — how the format/content of the LLM prompt affects output quality
+- *CWE / CVE* — Common Weakness Enumeration and Common Vulnerabilities and Exposures
+- *CVSS scoring* — how vulnerability severity is standardised
+
+* Running Tests
+
+#+BEGIN_SRC bash
+# Fast unit tests (no Ollama required)
+pytest tests/unit/ -v
+
+# With coverage report
+pytest tests/unit/ --cov=vuln_scanner --cov-report=html
+open htmlcov/index.html
+
+# Full integration tests (requires Ollama + populated DB)
+pytest tests/integration/ -m integration -v
+>>>>>>> b779867 (modify: major changes)
 #+END_SRC
 
 * Contributing
